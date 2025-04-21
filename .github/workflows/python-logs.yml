@@ -1,0 +1,43 @@
+name: Python Logging Workflow
+
+on:
+  push:
+    paths:
+      - 'python-logger/**'
+  workflow_dispatch:  # Allow manual runs
+
+jobs:
+  log_python:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Run Python script
+        run: |
+          python python-logger/main.py > python-logger/output.log 2>&1 || echo "Script failed (check logs)"
+
+      - name: Upload log artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-logs-${{ github.run_id }}
+          path: python-logger/output.log
+          retention-days: 7  # Auto-delete after 1 week
+
+  notify_on_failure:
+    if: failure() && github.event_name == 'push'
+    needs: log_python
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify via Slack
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST -H "Content-type: application/json" \
+          --data "{\"text\":\"❌ Logging failed in $GITHUB_REPOSITORY\nView run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID\"}" \
+          "$SLACK_WEBHOOK"
